@@ -1,0 +1,2 @@
+include storage_timeline.wasm
+include wasm_exec.js

@@ -6,6 +6,7 @@ import os
 import subprocess
 import tempfile
 import base64
+import importlib.util
 
 
 def is_v2_api(value):
@@ -18,44 +19,42 @@ class GoWasmRunner:
     """
 
     def __init__(self, wasm_file_path="storage_timeline.wasm", wasm_exec_path="wasm_exec.js"):
-        # Try to find files relative to the module location
-        import os
-        import pkg_resources
-        import importlib.util
 
-        # Get the current module directory
-        module_spec = importlib.util.find_spec('storage_timeline_client')
-        if module_spec and module_spec.origin:
-            module_dir = os.path.dirname(os.path.abspath(module_spec.origin))
+        # Спробувати знайти файли в різних місцях
+        # 1. За переданими шляхами
+        if os.path.exists(wasm_file_path) and os.path.exists(wasm_exec_path):
+            self.wasm_file_path = os.path.abspath(wasm_file_path)
+            self.wasm_exec_path = os.path.abspath(wasm_exec_path)
         else:
-            module_dir = os.path.dirname(os.path.abspath(__file__))
+            # 2. В директорії модуля
+            module_spec = importlib.util.find_spec('storage_timeline_client')
+            if module_spec and module_spec.origin:
+                module_dir = os.path.dirname(os.path.abspath(module_spec.origin))
 
-        # Check if files exist at specified paths
-        if not os.path.exists(wasm_file_path):
-            # Try to find in package resources
-            try:
-                wasm_file_path = pkg_resources.resource_filename('', 'storage_timeline.wasm')
-            except:
-                # If failed, use path relative to module
-                wasm_file_path = os.path.join(module_dir, 'storage_timeline.wasm')
+                # Спробувати знайти в директорії модуля
+                wasm_file_path_local = os.path.join(module_dir, 'storage_timeline.wasm')
+                wasm_exec_path_local = os.path.join(module_dir, 'wasm_exec.js')
 
-        if not os.path.exists(wasm_exec_path):
-            # Try to find in package resources
-            try:
-                wasm_exec_path = pkg_resources.resource_filename('', 'wasm_exec.js')
-            except:
-                # If failed, use path relative to module
-                wasm_exec_path = os.path.join(module_dir, 'wasm_exec.js')
+                if os.path.exists(wasm_file_path_local) and os.path.exists(wasm_exec_path_local):
+                    self.wasm_file_path = wasm_file_path_local
+                    self.wasm_exec_path = wasm_exec_path_local
+                else:
+                    # 3. Пошук в кореневому каталозі проекту
+                    current_dir = os.getcwd()
+                    wasm_file_path_proj = os.path.join(current_dir, 'storage_timeline.wasm')
+                    wasm_exec_path_proj = os.path.join(current_dir, 'wasm_exec.js')
 
-        # Check if files exist at found paths
-        if not os.path.exists(wasm_file_path):
-            raise FileNotFoundError(f"Could not find WASM file: {wasm_file_path}")
-        if not os.path.exists(wasm_exec_path):
-            raise FileNotFoundError(f"Could not find JavaScript file: {wasm_exec_path}")
+                    if os.path.exists(wasm_file_path_proj) and os.path.exists(wasm_exec_path_proj):
+                        self.wasm_file_path = wasm_file_path_proj
+                        self.wasm_exec_path = wasm_exec_path_proj
+                    else:
+                        # Якщо все невдало, повідомити про помилку
+                        raise FileNotFoundError(
+                            "Could not find WASM files. Please ensure 'storage_timeline.wasm' and 'wasm_exec.js' "
+                            "are placed in the current directory or package installation directory."
+                        )
 
-        # Use absolute paths
-        self.wasm_file_path = os.path.abspath(wasm_file_path)
-        self.wasm_exec_path = os.path.abspath(wasm_exec_path)
+        # Ініціалізація інших атрибутів
         self.node_script_path = None
         self.initialize()
 
