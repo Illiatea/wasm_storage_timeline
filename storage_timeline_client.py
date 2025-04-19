@@ -15,23 +15,23 @@ def is_v2_api(value):
 
 class GoWasmRunner:
     """
-    Клас для запуску Go WebAssembly модуля через Node.js
+    Class for running Go WebAssembly module through Node.js
     """
 
     def __init__(self, wasm_file_path="storage_timeline.wasm", wasm_exec_path="wasm_exec.js"):
 
-        # Спробувати знайти файли в різних місцях
-        # 1. За переданими шляхами
+        # Try to find files in different locations
+        # 1. Using provided paths
         if os.path.exists(wasm_file_path) and os.path.exists(wasm_exec_path):
             self.wasm_file_path = os.path.abspath(wasm_file_path)
             self.wasm_exec_path = os.path.abspath(wasm_exec_path)
         else:
-            # 2. В директорії модуля
+            # 2. In the module directory
             module_spec = importlib.util.find_spec('storage_timeline_client')
             if module_spec and module_spec.origin:
                 module_dir = os.path.dirname(os.path.abspath(module_spec.origin))
 
-                # Спробувати знайти в директорії модуля
+                # Try to find in module directory
                 wasm_file_path_local = os.path.join(module_dir, 'storage_timeline.wasm')
                 wasm_exec_path_local = os.path.join(module_dir, 'wasm_exec.js')
 
@@ -39,7 +39,7 @@ class GoWasmRunner:
                     self.wasm_file_path = wasm_file_path_local
                     self.wasm_exec_path = wasm_exec_path_local
                 else:
-                    # 3. Пошук в кореневому каталозі проекту
+                    # 3. Search in project root directory
                     current_dir = os.getcwd()
                     wasm_file_path_proj = os.path.join(current_dir, 'storage_timeline.wasm')
                     wasm_exec_path_proj = os.path.join(current_dir, 'wasm_exec.js')
@@ -48,61 +48,61 @@ class GoWasmRunner:
                         self.wasm_file_path = wasm_file_path_proj
                         self.wasm_exec_path = wasm_exec_path_proj
                     else:
-                        # Якщо все невдало, повідомити про помилку
+                        # If all fails, report an error
                         raise FileNotFoundError(
                             "Could not find WASM files. Please ensure 'storage_timeline.wasm' and 'wasm_exec.js' "
                             "are placed in the current directory or package installation directory."
                         )
 
-        # Ініціалізація інших атрибутів
+        # Initialize other attributes
         self.node_script_path = None
         self.initialize()
 
     def initialize(self):
-        """Ініціалізує Node.js середовище для запуску Go WASM модуля"""
-        # Створюємо JavaScript код для завантаження та ініціалізації Go WASM модуля
+        """Initializes Node.js environment for running Go WASM module"""
+        # Create JavaScript code for loading and initializing Go WASM module
         node_script = """
         const fs = require('fs');
 
-        // Завантажуємо wasm_exec.js, який надає Go runtime для WASM
+        // Load wasm_exec.js, which provides Go runtime for WASM
         const wasmExecPath = process.argv[2];
         eval(fs.readFileSync(wasmExecPath, 'utf8'));
 
-        // Шлях до WASM файлу
+        // Path to WASM file
         const wasmPath = process.argv[3];
 
-        // Шляхи до файлів вводу/виводу
+        // Paths to input/output files
         const inputFilePath = process.argv[4];
         const outputFilePath = process.argv[5];
-        const encodeType = process.argv[6] || ''; // 'base64' або порожній рядок
+        const encodeType = process.argv[6] || ''; // 'base64' or empty string
 
-        // Функція для запуску основної логіки після завантаження WASM
+        // Function to run main logic after loading WASM
         async function runWasm() {
             try {
-                // Створюємо Go середовище
+                // Create Go environment
                 const go = new Go();
 
-                // Завантажуємо та інстанціюємо WASM модуль
+                // Load and instantiate WASM module
                 const wasmInstance = await WebAssembly.instantiate(
                     fs.readFileSync(wasmPath), 
                     go.importObject
                 );
 
-                // Запускаємо Go середовище
+                // Run Go environment
                 go.run(wasmInstance.instance);
 
-                // Читаємо дані з файлу
+                // Read data from file
                 let inputData = fs.readFileSync(inputFilePath);
 
-                // Якщо вказано base64, декодуємо дані
+                // If base64 is specified, decode the data
                 if (encodeType === 'base64') {
                     inputData = Buffer.from(inputData.toString(), 'base64');
                 }
 
-                // Викликаємо функцію parse з Timeline
+                // Call the parse function from Timeline
                 const result = StorageTimeline.Timeline.parse(new Uint8Array(inputData));
 
-                // Записуємо результат у файл виводу
+                // Write result to output file
                 fs.writeFileSync(outputFilePath, JSON.stringify(result, null, 2));
 
                 process.exit(0);
@@ -112,27 +112,27 @@ class GoWasmRunner:
             }
         }
 
-        // Запускаємо основну логіку
+        // Run main logic
         runWasm().catch(err => {
             console.error('Fatal error:', err);
             process.exit(1);
         });
         """
 
-        # Створюємо тимчасовий файл для скрипта Node.js
+        # Create temporary file for Node.js script
         fd, self.node_script_path = tempfile.mkstemp(suffix='.js')
         os.write(fd, node_script.encode('utf-8'))
         os.close(fd)
 
     def parse_timeline(self, binary_data):
         """
-        Обробляє бінарні дані за допомогою Go WASM модуля
+        Process binary data using Go WASM module
         """
         try:
-            # Кодуємо бінарні дані в base64 для уникнення проблем із передачею
+            # Encode binary data in base64 to avoid transfer issues
             encoded_data = base64.b64encode(binary_data)
 
-            # Змінимо скрипт Node.js на льоту для передачі даних через файл
+            # Change Node.js script on the fly to pass data through file
             temp_input_file = tempfile.NamedTemporaryFile(delete=False, suffix='.bin')
             temp_input_path = temp_input_file.name
             temp_input_file.write(encoded_data)
@@ -142,7 +142,7 @@ class GoWasmRunner:
             temp_output_path = temp_output_file.name
             temp_output_file.close()
 
-            # Запускаємо Node.js процес із скриптом та шляхами до файлів
+            # Run Node.js process with script and file paths
             process = subprocess.Popen(
                 [
                     'node', self.node_script_path,
@@ -152,27 +152,27 @@ class GoWasmRunner:
                 stderr=subprocess.PIPE
             )
 
-            # Чекаємо завершення процесу
+            # Wait for process completion
             _, stderr = process.communicate()
 
             if process.returncode != 0:
-                # Помилка виконання
+                # Execution error
                 try:
                     error_message = stderr.decode('utf-8', errors='replace')
                 except:
-                    error_message = "Невідома помилка"
+                    error_message = "Unknown error"
 
-                raise Exception(f"Помилка при обробці даних WASM: {error_message}")
+                raise Exception(f"Error processing WASM data: {error_message}")
 
-            # Читаємо результат з файлу
+            # Read result from file
             try:
                 with open(temp_output_path, 'r') as f:
                     result_data = f.read()
                     return json.loads(result_data)
             except json.JSONDecodeError as json_err:
-                raise Exception(f"Помилка декодування JSON: {str(json_err)}. Перші 100 символів: {result_data[:100]}")
+                raise Exception(f"JSON decoding error: {str(json_err)}. First 100 characters: {result_data[:100]}")
             finally:
-                # Видаляємо тимчасові файли
+                # Delete temporary files
                 try:
                     os.unlink(temp_input_path)
                     os.unlink(temp_output_path)
@@ -180,10 +180,10 @@ class GoWasmRunner:
                     pass
 
         except Exception as e:
-            raise Exception(f"Помилка при виконанні WASM: {str(e)}")
+            raise Exception(f"Error executing WASM: {str(e)}")
 
     def __del__(self):
-        """Прибираємо тимчасові файли при знищенні об'єкта"""
+        """Clean up temporary files when object is destroyed"""
         if self.node_script_path and os.path.exists(self.node_script_path):
             try:
                 os.remove(self.node_script_path)
@@ -191,7 +191,7 @@ class GoWasmRunner:
                 pass
 
 
-# Клас для роботи з часовими рядами з підтримкою WASM
+# Class for working with time series with WASM support
 class TimeLine:
     def __init__(self, schema, name, binary=False):
         self.schema = schema
@@ -199,19 +199,19 @@ class TimeLine:
         self.binary = binary
 
     def _process_response(self, response):
-        """Обробляє відповідь від сервера, перевіряючи на бінарний формат"""
+        """Process server response, checking for binary format"""
         data = response.read()
         content_type = response.headers.get('Content-Type', '')
 
         if self.binary and 'application/storage-timeline' in content_type:
-            # Використовуємо WASM для аналізу бінарних даних
+            # Use WASM to analyze binary data
             return self.schema.storage.wasm_runner.parse_timeline(data)
         else:
-            # Звичайна JSON відповідь
+            # Regular JSON response
             return json.loads(data.decode('utf-8'))
 
     def all_numbers(self):
-        """Отримати всі числові значення з часового ряду"""
+        """Get all numeric values from the timeline"""
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -229,7 +229,7 @@ class TimeLine:
             return self._process_response(response)
 
     def all_strings(self):
-        """Отримати всі рядкові значення з часового ряду"""
+        """Get all string values from the timeline"""
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -247,7 +247,7 @@ class TimeLine:
             return self._process_response(response)
 
     def all_documents(self):
-        """Отримати всі документи з часового ряду"""
+        """Get all documents from the timeline"""
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -264,7 +264,7 @@ class TimeLine:
         with urllib.request.urlopen(request, context=ssl_context) as response:
             data = self._process_response(response)
 
-            # Аналіз JSON документів у відповіді
+            # Parse JSON documents in response
             for item in data:
                 try:
                     item["value"] = json.loads(item["value"])
@@ -274,7 +274,7 @@ class TimeLine:
             return data
 
     def add_number(self, value, time=None):
-        """Додати числове значення до часового ряду"""
+        """Add numeric value to timeline"""
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -301,13 +301,13 @@ class TimeLine:
         encoded_data = urllib.parse.urlencode(data).encode()
 
         request = urllib.request.Request(uri_string, data=encoded_data)
-        # Не додаємо заголовок для запитів додавання даних
+        # Don't add header for data addition requests
 
         response = urllib.request.urlopen(request, context=ssl_context)
         return self._process_response(response)
 
     def add_string(self, value, time=None):
-        """Додати рядкове значення до часового ряду"""
+        """Add string value to timeline"""
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -334,13 +334,13 @@ class TimeLine:
         encoded_data = urllib.parse.urlencode(data).encode()
 
         request = urllib.request.Request(uri_string, data=encoded_data)
-        # Не додаємо заголовок для запитів додавання даних
+        # Don't add header for data addition requests
 
         response = urllib.request.urlopen(request, context=ssl_context)
         return self._process_response(response)
 
 
-# Клас для роботи зі схемами даних
+# Class for working with data schemas
 class Schema:
     def __init__(self, storage, name, binary=False):
         self.storage = storage
@@ -348,7 +348,7 @@ class Schema:
         self.binary = binary
 
     def list(self):
-        """Отримати список часових рядів у схемі"""
+        """Get list of timelines in the schema"""
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -359,39 +359,39 @@ class Schema:
             uri_string = f"{self.storage.uri}/schema/list?schema={self.name}"
 
         request = urllib.request.Request(uri_string)
-        # Не додаємо заголовок для запитів списків
+        # Don't add header for list requests
 
         with urllib.request.urlopen(request, context=ssl_context) as url:
             data = json.loads(url.read().decode())
             return data
 
     def time_line(self, name):
-        """Отримати об'єкт часового ряду"""
+        """Get timeline object"""
         return TimeLine(self, name, self.binary)
 
 
-# Головний клас для роботи зі сховищем даних
+# Main class for working with data storage
 class Storage:
     def __init__(self, uri, binary=False, wasm_file="storage_timeline.wasm", wasm_exec="wasm_exec.js"):
         """
-        Ініціалізувати сховище даних
+        Initialize data storage
 
         Args:
-            uri: URI сервера сховища
-            binary: Чи використовувати бінарний формат (використовує WASM для обробки)
-            wasm_file: Шлях до WASM файлу
-            wasm_exec: Шлях до wasm_exec.js файлу
+            uri: Storage server URI
+            binary: Whether to use binary format (uses WASM for processing)
+            wasm_file: Path to WASM file
+            wasm_exec: Path to wasm_exec.js file
         """
         self.uri = uri.rstrip('/')
         self.binary = binary
         self.wasm_runner = GoWasmRunner(wasm_file, wasm_exec) if binary else None
 
     def schema(self, name):
-        """Отримати об'єкт схеми даних"""
+        """Get data schema object"""
         return Schema(self, name, self.binary)
 
     def list(self):
-        """Отримати список схем даних у сховищі"""
+        """Get list of data schemas in storage"""
         ssl_context = ssl.create_default_context()
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -402,7 +402,7 @@ class Storage:
             uri_string = f"{self.uri}/storage/list"
 
         request = urllib.request.Request(uri_string)
-        # Не додаємо заголовок для запитів списків
+        # Don't add header for list requests
 
         with urllib.request.urlopen(request, context=ssl_context) as url:
             data = json.loads(url.read().decode())

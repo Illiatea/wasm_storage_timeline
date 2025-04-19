@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="wasm-storage-timeline",
-    version="0.1.1",
+    version="0.1.2",
     description="Client library for interacting with storage timeline services",
     author="Illiatea",
     author_email="illiatea2@gmail.com",
@@ -11,5 +11,6 @@ setup(
         "": ["storage_timeline.wasm", "wasm_exec.js"],
     },
     include_package_data=True,
-    install_requires=['python-dotenv']
+    install_requires=['python-dotenv'],
+    zip_safe=False,
 )
